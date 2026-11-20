@@ -1,0 +1,150 @@
+; Programa 1 - Calculadora de aritmetica hexadecimal directa
+.MODEL SMALL
+.STACK 256
+
+mostrar MACRO txt
+    lea dx, txt
+    mov ah, 09h
+    int 21h
+ENDM
+
+.DATA
+msg1    db 'Primer valor hex (00-FF): $'
+msgOp   db 0Dh,0Ah,'Operador (+ o -): $'
+msg2    db 0Dh,0Ah,'Segundo valor hex (00-FF): $'
+msgRes  db 0Dh,0Ah,'Resultado (hex): $'
+msgAc   db 0Dh,0Ah,'CF=1: hubo acarreo (carry) en la suma$'
+msgBo   db 0Dh,0Ah,'CF=1: hubo prestamo (borrow), resultado negativo en complemento a 2$'
+msgSin  db 0Dh,0Ah,'CF=0: sin acarreo/prestamo$'
+msgErr  db 0Dh,0Ah,'Operador invalido$'
+op      db ?
+
+.CODE
+main PROC
+    mov ax, @data
+    mov ds, ax
+
+    mostrar msg1
+    call leerByteHex        ; AL = primer valor
+    mov bl, al              ; BL = operando 1
+
+    mostrar msgOp
+    mov ah, 01h             ; INT 21h/01h: lee caracter con eco
+    int 21h
+    mov op, al
+
+    mostrar msg2
+    call leerByteHex        ; AL = segundo valor
+    mov cl, al              ; CL = operando 2
+
+    mov al, bl              ; AL = operando 1
+    cmp op, '+'
+    je  suma
+    cmp op, '-'
+    je  resta
+    mostrar msgErr
+    jmp salir
+
+suma:
+    add al, cl              ; AL = AL + CL, CF = acarreo
+    mov bl, al              ; MOV no altera las banderas
+    mov bh, 0
+    jnc mostrarSuma
+    mov bh, 1
+mostrarSuma:
+    mostrar msgRes
+    mov al, bl
+    call imprimirByteHex
+    cmp bh, 1
+    jne  sinCarry
+    mostrar msgAc
+    jmp salir
+
+resta:
+    sub al, cl              ; AL = AL - CL, CF = prestamo
+    mov bl, al
+    mov bh, 0
+    jnc mostrarResta
+    mov bh, 1
+mostrarResta:
+    mostrar msgRes
+    mov al, bl
+    call imprimirByteHex
+    cmp bh, 1
+    jne  sinCarry
+    mostrar msgBo
+    jmp salir
+
+sinCarry:
+    mostrar msgSin
+
+salir:
+    mov ah, 4Ch             ; INT 21h/4Ch: terminar y devolver control al SO
+    mov al, 0
+    int 21h
+main ENDP
+
+; ---- Lee un digito hex (0-9, A-F, a-f). Devuelve valor 0-15 en AL ----
+leerDigito PROC
+otra:
+    mov ah, 01h
+    int 21h
+    cmp al, '0'
+    jb  otra
+    cmp al, '9'
+    jbe esNum
+    cmp al, 'A'
+    jb  otra
+    cmp al, 'F'
+    jbe esMay
+    cmp al, 'a'
+    jb  otra
+    cmp al, 'f'
+    ja  otra
+    sub al, 20h             ; minuscula -> mayuscula
+esMay:
+    sub al, 37h             ; 'A'(41h) -> 0Ah
+    ret
+esNum:
+    sub al, '0'
+    ret
+leerDigito ENDP
+
+; ---- Lee 2 digitos hex y arma un byte en AL ----
+leerByteHex PROC
+    push cx
+    call leerDigito
+    mov cl, 4
+    shl al, cl              ; nibble alto
+    mov dh, al
+    call leerDigito
+    or  al, dh              ; une nibble alto y bajo
+    pop cx
+    ret
+leerByteHex ENDP
+
+; ---- Imprime AL como 2 digitos hex ----
+imprimirByteHex PROC
+    push ax
+    mov cl, 4
+    shr al, cl              ; nibble alto
+    call imprimirNibble
+    pop ax
+    and al, 0Fh             ; nibble bajo
+    call imprimirNibble
+    ret
+imprimirByteHex ENDP
+
+imprimirNibble PROC
+    cmp al, 9
+    jbe digito
+    add al, 7               ; salta de '9' a 'A'
+digito:
+    add al, '0'
+    mov dl, al
+    mov ah, 02h             ; INT 21h/02h: imprime caracter en DL
+    int 21h
+    ret
+imprimirNibble ENDP
+
+END main
